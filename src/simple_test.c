@@ -10,13 +10,15 @@ static automata_t	*cleanup(automata_t *at, state_t *last_st, state_t *st, transi
 	return (NULL);
 }
 
+#define STACK_SIZE 25
+
 automata_t	*at_from_str(input_t const *str) {
 	automata_t		*at = NULL;
 	state_t			*lst = NULL, *st = NULL;
 	transition_t	*t = NULL;
 
-	// ssize_t			stidx_stack[25];
-	// ssize_t			stidx_pos = 0;
+	ssize_t			stidx_stack[STACK_SIZE];
+	ssize_t			stidx_pos = 0;
 
 	at = automata_new();
 	if (at == NULL)
@@ -66,6 +68,47 @@ automata_t	*at_from_str(input_t const *str) {
 					return (cleanup(at, NULL, NULL, t));
 				++pos;
 				continue ;
+			} else if (str[pos] == lbrack && stidx_pos < STACK_SIZE) {
+				// Start new sub-automata with epsilon connection
+				lst = st;
+				lst_idx = st_idx;
+				if (state_resize(lst, at->alphabet_size) == false)
+					return (cleanup(at, NULL, NULL, NULL));
+				st = state_new();
+				t = transition_new();
+				if (st == NULL || t == NULL)
+					return (cleanup(at, NULL, st, t));
+				st_idx = automata_add_state(at, st);
+				if (st_idx == -1)
+					return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
+				t->state = st_idx;
+				if (state_add_transition(lst, t, epsi_idx) == false)
+					return (cleanup(at, NULL, NULL, t));
+				// Save lst_idx
+				stidx_stack[stidx_pos++] = lst_idx;
+				++pos;
+				continue ;
+			} else if (str[pos] == rbrack && stidx_pos != 0) {
+				// Connect end of sub-automata through epsilon and reset lst_idx
+				// Start new sub-automata with epsilon connection
+				lst = st;
+				lst_idx = st_idx;
+				if (state_resize(lst, at->alphabet_size) == false)
+					return (cleanup(at, NULL, NULL, NULL));
+				st = state_new();
+				t = transition_new();
+				if (st == NULL || t == NULL)
+					return (cleanup(at, NULL, st, t));
+				st_idx = automata_add_state(at, st);
+				if (st_idx == -1)
+					return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
+				t->state = st_idx;
+				if (state_add_transition(lst, t, epsi_idx) == false)
+				return (cleanup(at, NULL, NULL, t));
+				lst_idx = stidx_stack[--stidx_pos];
+				lst = at->states[lst_idx];
+				++pos;
+				continue ;
 			} else if (str[pos] == escape) {
 				flags.esc = true;
 				++pos;
@@ -88,6 +131,7 @@ automata_t	*at_from_str(input_t const *str) {
 			t->state = st_idx;
 			if (state_add_transition(lst, t, epsi_idx) == false)
 				return (cleanup(at, NULL, NULL, t));
+			// Add new literal node
 			lst = st;
 			lst_idx = st_idx;
 			ssize_t	idx = automata_add_input(at, str[pos]);
