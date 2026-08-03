@@ -10,7 +10,7 @@ static const input_t	lsqbrack = '[';
 static const input_t	rsqbrack = ']';
 static const input_t	asterisk = '*';
 static const input_t	escape = '\\';
-static const input_t	empty = -1;
+static const input_t	epsilon = -1;
 
 typedef struct state_s	state_t;
 

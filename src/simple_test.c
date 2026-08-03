@@ -14,6 +14,10 @@ automata_t	*at_from_str(input_t const *str) {
 	automata_t		*at = NULL;
 	state_t			*lst = NULL, *st = NULL;
 	transition_t	*t = NULL;
+
+	// ssize_t			stidx_stack[25];
+	// ssize_t			stidx_pos = 0;
+
 	at = automata_new();
 	if (at == NULL)
 		return (cleanup(at, lst, st, t));
@@ -23,6 +27,10 @@ automata_t	*at_from_str(input_t const *str) {
 	if (automata_add_state(at, st) == -1)
 		return (cleanup(at, lst, st, t));
 	at->start_state = 0;
+
+	ssize_t	epsi_idx = automata_add_input(at, epsilon);
+	if (epsi_idx < 0)
+		return (cleanup(at, NULL, NULL, NULL));
 
 	struct {
 		bool	set;
@@ -47,17 +55,14 @@ automata_t	*at_from_str(input_t const *str) {
 				continue ;
 			} else if (str[pos] == asterisk) {
 				/* Asterisk, reconnect last state to itself on idx of 'asterisk'
-			 * input */
-				ssize_t	idx = automata_add_input(at, empty);
-				if (idx < 0)
-					return (cleanup(at, NULL, NULL, NULL));
-				if (state_resize(lst, at->alphabet_size) == false)
+				 * input */
+				if (state_resize(st, at->alphabet_size) == false)
 					return (cleanup(at, NULL, NULL, NULL));
 				t = transition_new();
 				if (t == NULL)
 					return (cleanup(at, NULL, NULL, t));
 				t->state = lst_idx;
-				if (state_add_transition(lst, t, idx) == false)
+				if (state_add_transition(st, t, epsi_idx) == false)
 					return (cleanup(at, NULL, NULL, t));
 				++pos;
 				continue ;
@@ -68,6 +73,21 @@ automata_t	*at_from_str(input_t const *str) {
 			}
 		}
 		if (flags.set == false) {
+			// Start new sub-automata with epsilon connection
+			lst = st;
+			lst_idx = st_idx;
+			if (state_resize(lst, at->alphabet_size) == false)
+				return (cleanup(at, NULL, NULL, NULL));
+			st = state_new();
+			t = transition_new();
+			if (st == NULL || t == NULL)
+				return (cleanup(at, NULL, st, t));
+			st_idx = automata_add_state(at, st);
+			if (st_idx == -1)
+				return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
+			t->state = st_idx;
+			if (state_add_transition(lst, t, epsi_idx) == false)
+				return (cleanup(at, NULL, NULL, t));
 			lst = st;
 			lst_idx = st_idx;
 			ssize_t	idx = automata_add_input(at, str[pos]);
@@ -116,6 +136,37 @@ automata_t	*at_from_str(input_t const *str) {
 	return (at);
 }
 
+ssize_t __ltostr_impl(ssize_t num, char *str, ssize_t len, ssize_t depth) {
+	str[depth] = (num % 10) + 0x30;
+	num = num / 10;
+	if (num == 0 || --len == 0)
+		return (depth);
+	return (__ltostr_impl(num, str, len, depth + 1));
+}
+
+void ltostr(ssize_t num, char *str, char **endptr, ssize_t len) {
+	ssize_t	end = __ltostr_impl(num, str, len, 0);
+	*endptr = str + end;
+}
+
+#include <string.h>
+
+const char	*transition_string(transition_t *t) {
+	static char		str[20];
+	char			*endptr;
+	ssize_t			pos = 0;
+
+	memset(str, '\0', 20);
+	while (pos < 18 && t != NULL) {
+		if (pos != 0 )
+			str[pos++] = ',';
+		ltostr(t->state, str + pos, &endptr, 20 - pos);
+		pos = endptr - str + 1;
+		t = t->next;
+	}
+	return (str);
+}
+
 #include <stdio.h>
 #include <ctype.h>
 
@@ -131,8 +182,8 @@ void print_automata(automata_t *at) {
 	for (int i = 0; i < cols; i++) {
 		if (isprint(at->alphabet[i])) {
 			printf("%8c|", at->alphabet[i]);
-		} else if (at->alphabet[i] == empty) {
-			printf("%8s|", "empty");
+		} else if (at->alphabet[i] == epsilon) {
+			printf("%8s|", "epsilon");
 		} else {
 			printf("%8d|", (unsigned int)(at->alphabet[i]));
 		}
@@ -155,7 +206,7 @@ void print_automata(automata_t *at) {
 				if (at->states[i]->table[j] == NULL) {
 					printf("%8s|", "xxxxxxxx");
 				} else {
-					printf("%8ld|", at->states[i]->table[j]->state);
+					printf("%8s|", transition_string(at->states[i]->table[j]));
 				}
 			}
 		}
