@@ -10,6 +10,7 @@ static const input_t	lsqbrack = '[';
 static const input_t	rsqbrack = ']';
 static const input_t	lbrack = '(';
 static const input_t	rbrack = ')';
+static const input_t	pipeor = '|';
 static const input_t	asterisk = '*';
 static const input_t	escape = '\\';
 static const input_t	epsilon = -1;

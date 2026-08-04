@@ -12,6 +12,39 @@ static automata_t	*cleanup(automata_t *at, state_t *last_st, state_t *st, transi
 
 #define STACK_SIZE 25
 
+#define START_SUBAUTOMATA \
+	lst = st;\
+	lst_idx = st_idx;\
+	if (state_resize(lst, at->alphabet_size) == false) {\
+		return (cleanup(at, NULL, NULL, NULL));\
+	}\
+	st = state_new();\
+	t = transition_new();\
+	if (st == NULL || t == NULL) {\
+		return (cleanup(at, NULL, st, t));\
+	}\
+	st_idx = automata_add_state(at, st);\
+	if (st_idx == -1) {\
+		return (cleanup(at, NULL, st, t));\
+	}\
+	t->state = st_idx;\
+	if (state_add_transition(lst, t, epsi_idx) == false) {\
+		return (cleanup(at, NULL, NULL, t));\
+	}
+
+#define EPSILON_TO_LST \
+	if (state_resize(st, at->alphabet_size) == false) {\
+		return (cleanup(at, NULL, NULL, NULL));\
+	}\
+	t = transition_new();\
+	if (t == NULL) {\
+		return (cleanup(at, NULL, NULL, t));\
+	}\
+	t->state = lst_idx;\
+	if (state_add_transition(st, t, epsi_idx) == false){\
+		return (cleanup(at, NULL, NULL, t));\
+	}
+
 automata_t	*at_from_str(input_t const *str) {
 	automata_t		*at = NULL;
 	state_t			*lst = NULL, *st = NULL;
@@ -37,9 +70,11 @@ automata_t	*at_from_str(input_t const *str) {
 	struct {
 		bool	set;
 		bool	esc;
+		bool	or;
 	}	flags;
 	flags.set = false;
 	flags.esc = false;
+	flags.or = false;
 
 	ssize_t	lst_idx = 0, st_idx = 0;
 	ssize_t	pos = 0;
@@ -58,32 +93,12 @@ automata_t	*at_from_str(input_t const *str) {
 			} else if (str[pos] == asterisk) {
 				/* Asterisk, reconnect last state to itself on idx of 'asterisk'
 				 * input */
-				if (state_resize(st, at->alphabet_size) == false)
-					return (cleanup(at, NULL, NULL, NULL));
-				t = transition_new();
-				if (t == NULL)
-					return (cleanup(at, NULL, NULL, t));
-				t->state = lst_idx;
-				if (state_add_transition(st, t, epsi_idx) == false)
-					return (cleanup(at, NULL, NULL, t));
+				EPSILON_TO_LST
 				++pos;
 				continue ;
 			} else if (str[pos] == lbrack && stidx_pos < STACK_SIZE) {
 				// Start new sub-automata with epsilon connection
-				lst = st;
-				lst_idx = st_idx;
-				if (state_resize(lst, at->alphabet_size) == false)
-					return (cleanup(at, NULL, NULL, NULL));
-				st = state_new();
-				t = transition_new();
-				if (st == NULL || t == NULL)
-					return (cleanup(at, NULL, st, t));
-				st_idx = automata_add_state(at, st);
-				if (st_idx == -1)
-					return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
-				t->state = st_idx;
-				if (state_add_transition(lst, t, epsi_idx) == false)
-					return (cleanup(at, NULL, NULL, t));
+				START_SUBAUTOMATA
 				// Save lst_idx
 				stidx_stack[stidx_pos++] = lst_idx;
 				++pos;
@@ -104,9 +119,12 @@ automata_t	*at_from_str(input_t const *str) {
 					return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
 				t->state = st_idx;
 				if (state_add_transition(lst, t, epsi_idx) == false)
-				return (cleanup(at, NULL, NULL, t));
+					return (cleanup(at, NULL, NULL, t));
 				lst_idx = stidx_stack[--stidx_pos];
 				lst = at->states[lst_idx];
+				++pos;
+				continue ;
+			} else if (str[pos] == pipeor) {
 				++pos;
 				continue ;
 			} else if (str[pos] == escape) {
@@ -115,22 +133,9 @@ automata_t	*at_from_str(input_t const *str) {
 				continue ;
 			}
 		}
-		if (flags.set == false) {
+		if (flags.set == false && flags.or == false) {
 			// Start new sub-automata with epsilon connection
-			lst = st;
-			lst_idx = st_idx;
-			if (state_resize(lst, at->alphabet_size) == false)
-				return (cleanup(at, NULL, NULL, NULL));
-			st = state_new();
-			t = transition_new();
-			if (st == NULL || t == NULL)
-				return (cleanup(at, NULL, st, t));
-			st_idx = automata_add_state(at, st);
-			if (st_idx == -1)
-				return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
-			t->state = st_idx;
-			if (state_add_transition(lst, t, epsi_idx) == false)
-				return (cleanup(at, NULL, NULL, t));
+			START_SUBAUTOMATA
 			// Add new literal node
 			lst = st;
 			lst_idx = st_idx;
@@ -149,12 +154,15 @@ automata_t	*at_from_str(input_t const *str) {
 			t->state = st_idx;
 			if (state_add_transition(lst, t, idx) == false)
 				return (cleanup(at, NULL, NULL, t));
-		} else if (flags.set == true) {
+		} else if (flags.set == true || flags.or == true) {
+			// Add to state without creating new one
 			if (str[pos] == rsqbrack) {
 				flags.set = false;
 				++pos;
 				continue ;
 			}
+			// Reset or flag always
+			flags.or = false;
 			ssize_t	idx = automata_add_input(at, str[pos]);
 			if (idx < 0)
 				return (cleanup(at, NULL, NULL, t));
