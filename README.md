@@ -8,7 +8,7 @@ The main difference is that a Deterministic state machine hast only one valid st
 
 This prompts a certain design for state machines:
 
-## The Automata
+### The Automata
 
 The automata holds the alphabet and the states:
 
@@ -30,7 +30,7 @@ To be able to achieve this indexing through the alphabet a function that convert
 
 Each Automata has one start state. This state should be saved in the automata for easy access. Since all the states are indexed starting at 0 the start state can just be a number that refers to the index of the start state.
 
-## The State
+### The State
 
 In both Deterministic and Non-Deterministic Automatas the states look very similar: they consists of a table of transitions that has the same size as the alphabet of the automata. To make sure that later additions to an automatas alphabet can be reflected, these tables should be able to be resized.
 
@@ -47,7 +47,7 @@ typedef struct state {
 }   state_t;
 ```
 
-## The Transitions
+### The Transitions
 
 A transition itself only needs to hold the information about what state should be the next active state. The difference is that a Deterministic Automata can only have one viable transition while a Non-Deterministic one can have multiple.
 
@@ -59,3 +59,7 @@ typedef struct transition {
     struct transition   *next;
 }   transition_t;
 ```
+
+## Operations
+
+The inital construction of an automata is as an epsilon-NFA. For this construction we need a certain set of operations to create connections between start and end states of a subautomata

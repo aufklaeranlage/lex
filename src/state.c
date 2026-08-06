@@ -33,7 +33,7 @@ void state_clean(state_t *st) {
 	if (st == NULL)
 		return ;
 	for (ssize_t i = 0; i < st->table_size; i++) {
-		transition_del(st->table[i]);
+		transition_del_list(st->table[i]);
 	}
 	free(st->table);
 }

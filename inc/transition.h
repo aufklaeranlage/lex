@@ -9,6 +9,8 @@
 typedef struct transition_s {
 	ssize_t				state;
 	struct transition_s	*next;
+	ssize_t				min;
+	ssize_t				max;
 }	transition_t;
 
 bool			transition_init(transition_t *t);

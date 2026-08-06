@@ -42,7 +42,11 @@ PRNT		:= printf
 
 # * FLAGS ******************************************************************** #
 
-CFLAGS		?=	-Wall -Wextra -Werror
+CFLAGS		?=
+
+ifndef NWERR
+	CFLAGS		+=	-Wall -Wextra -Werror
+endif
 
 CPPFLAGS	:=
 CPPFLAGS	+= -MMD -MP

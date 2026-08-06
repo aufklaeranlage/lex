@@ -2,9 +2,10 @@
 #include "state.h"
 #include "transition.h"
 
-static automata_t	*cleanup(automata_t *at, state_t *last_st, state_t *st, transition_t *t) {
+#include <stdlib.h>
+
+static automata_t	*cleanup(automata_t *at, state_t *st, transition_t *t) {
 	automata_del(at);
-	state_del(last_st);
 	state_del(st);
 	transition_del(t);
 	return (NULL);
@@ -12,193 +13,23 @@ static automata_t	*cleanup(automata_t *at, state_t *last_st, state_t *st, transi
 
 #define STACK_SIZE 25
 
-#define START_SUBAUTOMATA \
-	lst = st;\
-	lst_idx = st_idx;\
-	if (state_resize(lst, at->alphabet_size) == false) {\
-		return (cleanup(at, NULL, NULL, NULL));\
-	}\
-	st = state_new();\
-	t = transition_new();\
-	if (st == NULL || t == NULL) {\
-		return (cleanup(at, NULL, st, t));\
-	}\
-	st_idx = automata_add_state(at, st);\
-	if (st_idx == -1) {\
-		return (cleanup(at, NULL, st, t));\
-	}\
-	t->state = st_idx;\
-	if (state_add_transition(lst, t, epsi_idx) == false) {\
-		return (cleanup(at, NULL, NULL, t));\
-	}
-
-#define EPSILON_TO_LST \
-	if (state_resize(st, at->alphabet_size) == false) {\
-		return (cleanup(at, NULL, NULL, NULL));\
-	}\
-	t = transition_new();\
-	if (t == NULL) {\
-		return (cleanup(at, NULL, NULL, t));\
-	}\
-	t->state = lst_idx;\
-	if (state_add_transition(st, t, epsi_idx) == false){\
-		return (cleanup(at, NULL, NULL, t));\
-	}
-
-automata_t	*at_from_str(input_t const *str) {
-	automata_t		*at = NULL;
-	state_t			*lst = NULL, *st = NULL;
-	transition_t	*t = NULL;
-
-	ssize_t			stidx_stack[STACK_SIZE];
-	ssize_t			stidx_pos = 0;
-
-	at = automata_new();
-	if (at == NULL)
-		return (cleanup(at, lst, st, t));
-	st = state_new();
-	if (st == NULL)
-		return (cleanup(at, lst, st, t));
-	if (automata_add_state(at, st) == -1)
-		return (cleanup(at, lst, st, t));
-	at->start_state = 0;
-
-	ssize_t	epsi_idx = automata_add_input(at, epsilon);
-	if (epsi_idx < 0)
-		return (cleanup(at, NULL, NULL, NULL));
-
-	struct {
-		bool	set;
-		bool	esc;
-		bool	or;
-	}	flags;
-	flags.set = false;
-	flags.esc = false;
-	flags.or = false;
-
-	ssize_t	lst_idx = 0, st_idx = 0;
-	ssize_t	pos = 0;
-	while (str[pos] != '\0') {
-		if (flags.esc == false) {
-			if (str[pos] == lsqbrack && flags.set == false) {
-				lst = st;
-				lst_idx = st_idx;
-				flags.set = true;
-				st = state_new();
-				st_idx = automata_add_state(at, st);
-				if (st_idx == -1)
-					return (cleanup(at, NULL, st, NULL));
-				++pos;
-				continue ;
-			} else if (str[pos] == asterisk) {
-				/* Asterisk, reconnect last state to itself on idx of 'asterisk'
-				 * input */
-				EPSILON_TO_LST
-				++pos;
-				continue ;
-			} else if (str[pos] == lbrack && stidx_pos < STACK_SIZE) {
-				// Start new sub-automata with epsilon connection
-				START_SUBAUTOMATA
-				// Save lst_idx
-				stidx_stack[stidx_pos++] = lst_idx;
-				++pos;
-				continue ;
-			} else if (str[pos] == rbrack && stidx_pos != 0) {
-				// Connect end of sub-automata through epsilon and reset lst_idx
-				// Start new sub-automata with epsilon connection
-				lst = st;
-				lst_idx = st_idx;
-				if (state_resize(lst, at->alphabet_size) == false)
-					return (cleanup(at, NULL, NULL, NULL));
-				st = state_new();
-				t = transition_new();
-				if (st == NULL || t == NULL)
-					return (cleanup(at, NULL, st, t));
-				st_idx = automata_add_state(at, st);
-				if (st_idx == -1)
-					return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
-				t->state = st_idx;
-				if (state_add_transition(lst, t, epsi_idx) == false)
-					return (cleanup(at, NULL, NULL, t));
-				lst_idx = stidx_stack[--stidx_pos];
-				lst = at->states[lst_idx];
-				++pos;
-				continue ;
-			} else if (str[pos] == pipeor) {
-				++pos;
-				continue ;
-			} else if (str[pos] == escape) {
-				flags.esc = true;
-				++pos;
-				continue ;
-			}
-		}
-		if (flags.set == false && flags.or == false) {
-			// Start new sub-automata with epsilon connection
-			START_SUBAUTOMATA
-			// Add new literal node
-			lst = st;
-			lst_idx = st_idx;
-			ssize_t	idx = automata_add_input(at, str[pos]);
-			if (idx < 0)
-				return (cleanup(at, NULL, NULL, NULL));
-			if (state_resize(lst, at->alphabet_size) == false)
-				return (cleanup(at, NULL, NULL, NULL));
-			st = state_new();
-			t = transition_new();
-			if (st == NULL || t == NULL)
-				return (cleanup(at, NULL, st, t));
-			st_idx = automata_add_state(at, st);
-			if (st_idx == -1)
-				return (cleanup(at, NULL, st, t)); // transition is alredy in lst 
-			t->state = st_idx;
-			if (state_add_transition(lst, t, idx) == false)
-				return (cleanup(at, NULL, NULL, t));
-		} else if (flags.set == true || flags.or == true) {
-			// Add to state without creating new one
-			if (str[pos] == rsqbrack) {
-				flags.set = false;
-				++pos;
-				continue ;
-			}
-			// Reset or flag always
-			flags.or = false;
-			ssize_t	idx = automata_add_input(at, str[pos]);
-			if (idx < 0)
-				return (cleanup(at, NULL, NULL, t));
-			if (state_resize(lst, at->alphabet_size) == false)
-				return (cleanup(at, NULL, NULL, t));
-			t = transition_new();
-			if (t == NULL)
-				return (cleanup(at, NULL, NULL, t));
-			t->state = st_idx;
-			if (state_add_transition(lst, t, idx) == false)
-				return (cleanup(at, NULL, NULL, t));
-		}
-		if (flags.esc == true)
-			flags.esc = false;
-		++pos;
-	}
-	st->accepting = true;
-	for (ssize_t i = 0; i < at->nstates; i++) {
-		if (at->states[i]->table_size < at->alphabet_size) {
-			state_resize(at->states[i], at->alphabet_size);
-		}
-	}
-	return (at);
-}
-
 ssize_t __ltostr_impl(ssize_t num, char *str, ssize_t len, ssize_t depth) {
-	str[depth] = (num % 10) + 0x30;
-	num = num / 10;
+	char c = (num % 10) + 0x30;
 	if (num == 0 || --len == 0)
 		return (depth);
-	return (__ltostr_impl(num, str, len, depth + 1));
+	ssize_t	ret = __ltostr_impl(num / 10, str, len, depth + 1);
+	str[ret - 1 - depth] = c;
+	return (ret);
 }
 
 void ltostr(ssize_t num, char *str, char **endptr, ssize_t len) {
-	ssize_t	end = __ltostr_impl(num, str, len, 0);
-	*endptr = str + end;
+	if (num == 0 && len > 0) {
+		str[0] = '0';
+		*endptr = str;
+	} else {
+		ssize_t	end = __ltostr_impl(num, str, len, 0);
+		*endptr = str + end;
+	}
 }
 
 #include <string.h>
@@ -213,7 +44,22 @@ const char	*transition_string(transition_t *t) {
 		if (pos != 0 )
 			str[pos++] = ',';
 		ltostr(t->state, str + pos, &endptr, 20 - pos);
-		pos = endptr - str + 1;
+		pos = endptr - str;
+		if (t->min != 0 || t->max != 0) {
+			str[pos++] = '{';
+			if (t->min != 0) {
+				ltostr(t->min, str + pos, &endptr, 20 - pos);
+				pos = endptr - str;
+			}
+			if (t->min != t->max) {
+				str[pos++] = ',';
+			}
+			if (t->max != t->min && t->max != 0) {
+				ltostr(t->max, str + pos, &endptr, 20 - pos);
+				pos = endptr - str;
+			}
+			str[pos++] = '}';
+		}
 		t = t->next;
 	}
 	return (str);
@@ -221,6 +67,35 @@ const char	*transition_string(transition_t *t) {
 
 #include <stdio.h>
 #include <ctype.h>
+
+void mermaid_automata(automata_t *at) {
+	ssize_t	states = at->nstates;
+
+	printf("stateDiagram\n");
+	for (ssize_t i = 0; i < states; i++) {
+		state_t	*state = at->states[i];
+
+		if (at->start_state == i) {
+			printf("\t[*] --> %ld : epsilon\n", i);
+		}
+		if (state->accepting == true) {
+			printf("\t%ld --> [*] : epsilon\n", i);
+		}
+
+		for (ssize_t j = 0; j < state->table_size; j++) {
+			transition_t *t = state->table[j];
+			while (t != NULL) {
+				printf("\t%ld --> %ld", i, t->state);
+				if (at->alphabet[j] != epsilon) {
+					printf(" : %c\n", at->alphabet[j]);
+				} else {
+					printf(" : epsilon\n");
+				}
+				t = t->next;
+			}
+		}
+	}
+}
 
 void print_automata(automata_t *at) {
 	ssize_t	cols = at->alphabet_size, rows = at->nstates;
@@ -255,7 +130,7 @@ void print_automata(automata_t *at) {
 			}
 		} else {
 			for (int j = 0; j < cols; j++) {
-				if (at->states[i]->table[j] == NULL) {
+				if (at->states[i]->table_size <= j || at->states[i]->table[j] == NULL) {
 					printf("%8s|", "xxxxxxxx");
 				} else {
 					printf("%8s|", transition_string(at->states[i]->table[j]));
@@ -271,13 +146,227 @@ void print_automata(automata_t *at) {
 	printf("-\n");
 }
 
+ssize_t	automata_get_stateidx(automata_t *at, state_t *st) {
+	for (ssize_t i = 0; i < at->nstates; i++) {
+		if (at->states[i] == st)
+			return (i);
+	}
+	return (-1);
+}
+
+#define NEW_STATE(state) \
+	(state) = state_new();\
+	if ((state) == NULL) {\
+		return (cleanup(at, NULL, NULL));\
+	}\
+	if (automata_add_state(at, (state)) == -1) {\
+		return (cleanup(at, (state), NULL));\
+	}\
+
+#define CONNECT(from, to, input_idx) \
+	if (state_resize((from), at->alphabet_size) == false) {\
+		return (cleanup(at, NULL, NULL));\
+	}\
+	t = transition_new();\
+	if (t == NULL) {\
+		return (cleanup(at, NULL, NULL));\
+	}\
+	t->state = automata_get_stateidx(at, (to));\
+	if (state_add_transition((from), t, (input_idx)) == false){\
+		return (cleanup(at, NULL, t));\
+	}\
+
+#define CUR_SCOPE scope[scope_pos]
+
+#define MOVE_SCOPE \
+	prev = start;\
+	start = end;\
+	NEW_STATE(end);\
+	CUR_SCOPE.end = end;\
+
+automata_t *enfa_from_str(input_t const *str) {
+	automata_t	*at = automata_new();
+	if (at == NULL) { return (NULL); }
+	state_t		*prev = NULL, *start = NULL, *end = NULL;
+	transition_t	*t = NULL;
+
+	struct {
+		bool	or;
+	}	flags;
+	flags.or = false;
+
+	at->start_state = 0;
+	ssize_t		epsi_idx = automata_add_input(at, epsilon);
+	if (epsi_idx == -1) { return (cleanup(at, NULL, NULL)); }
+
+	struct {
+		state_t	*start;
+		state_t	*end;
+
+		state_t	*threads[STACK_SIZE];
+		ssize_t	thread_pos;
+	}	scope[STACK_SIZE];
+	ssize_t	scope_pos = 0;
+	CUR_SCOPE.thread_pos = 0;
+
+	NEW_STATE(start);
+	prev = start;
+	end = start;
+	CUR_SCOPE.start = start;
+	CUR_SCOPE.end = start;
+
+	ssize_t	pos = 0;
+	ssize_t	alpha_idx;
+	while (str[pos] != '\0') {
+		if (str[pos] == asterisk) {
+			state_t	*tmp;
+			NEW_STATE(tmp);
+			ssize_t	start_idx = automata_get_stateidx(at, start);
+			ssize_t	tmp_idx = automata_get_stateidx(at, tmp);
+			at->states[start_idx] = tmp;
+			at->states[tmp_idx] = start;
+			prev = tmp;
+			CUR_SCOPE.start = tmp;
+			CONNECT(end, start, epsi_idx);
+			NEW_STATE(CUR_SCOPE.end);
+			if (automata_get_stateidx(at, start) == at->start_state) {
+				at->start_state = automata_get_stateidx(at, CUR_SCOPE.start);
+			}
+			CONNECT(prev, start, epsi_idx);
+			CONNECT(end, CUR_SCOPE.end, epsi_idx);
+			start = CUR_SCOPE.start;
+			prev = start;
+			end = CUR_SCOPE.end;
+			CONNECT(start, end, epsi_idx);
+
+			++pos;
+			continue ;
+		} else if (str[pos] == lbrack) {
+			NEW_STATE(start);
+			CONNECT(CUR_SCOPE.end, start, epsi_idx);
+			NEW_STATE(end);
+			CUR_SCOPE.end = end;
+			++scope_pos;
+			prev = start;
+			end = start;
+			CUR_SCOPE.start = start;
+			CUR_SCOPE.end = end;
+			// Reset threadpos for new scope
+			CUR_SCOPE.thread_pos = 0;
+
+			++pos;
+			continue ;
+		} else if (str[pos] == rbrack) {
+			--scope_pos;
+			CONNECT(end, CUR_SCOPE.end, epsi_idx);
+			start = CUR_SCOPE.start;
+			prev = start;
+			end = CUR_SCOPE.end;
+
+			++pos;
+			continue ;
+		} else if (str[pos] == pipeor) {
+			// Save current end as thread to close
+			CUR_SCOPE.threads[CUR_SCOPE.thread_pos++] = end;
+			// Create new scope and do backward connection for previous one
+			// Only if the CUR_SCOPE.start is also the start node
+			// Otherwise we already have a pipeor node
+			if (start == CUR_SCOPE.start) {
+				NEW_STATE(CUR_SCOPE.start);
+				if (automata_get_stateidx(at, start) == at->start_state) {
+					at->start_state = automata_get_stateidx(at, CUR_SCOPE.start);
+				}
+				CONNECT(CUR_SCOPE.start, start, epsi_idx);
+			}
+			NEW_STATE(start);
+			CONNECT(CUR_SCOPE.start, start, epsi_idx);
+			end = start;
+			CUR_SCOPE.end = end;
+			flags.or = true;
+
+			++pos;
+			continue ;
+		}
+		// Literal input
+		alpha_idx = automata_add_input(at, str[pos]);
+		if (alpha_idx == -1) { return (cleanup(at, NULL, NULL)); }
+		// Connect loose threads if we didn't just add one
+		if (flags.or == false && CUR_SCOPE.thread_pos != 0) {
+			MOVE_SCOPE;
+			CONNECT(start, end, epsi_idx);
+			for (ssize_t i = 0; i < CUR_SCOPE.thread_pos; i++) {
+				CONNECT(CUR_SCOPE.threads[i], end, epsi_idx);
+			}
+			CUR_SCOPE.thread_pos = 0;
+		}
+		// Reset or flag so we connect threads on the next operation
+		flags.or = false;
+
+		MOVE_SCOPE;
+		CONNECT(start, end, alpha_idx);
+		++pos;
+	}
+
+	// Connect loose threads
+	if (CUR_SCOPE.thread_pos != 0) {
+		MOVE_SCOPE;
+		CONNECT(start, end, epsi_idx);
+		for (ssize_t i = 0; i < CUR_SCOPE.thread_pos; i++) {
+			CONNECT(CUR_SCOPE.threads[i], end, epsi_idx);
+		}
+		CUR_SCOPE.thread_pos = 0;
+	}
+	
+	// Needs to be before table size adjusting
+	if (start->table_size == 0) { CONNECT(start, end, epsi_idx); }
+	// Adjust all tables to appropriate size
+	for (ssize_t i = 0; i < at->nstates; i++) {
+		if (state_resize(at->states[i], at->alphabet_size) == false) {
+			return (cleanup(at, NULL, NULL));
+		}
+	}
+
+	end->accepting = true;
+	return (at);
+}
+
+// automata_t *dfa_from_enfa(automata_t const *nfa) {
+// 	automata_t	*dfa = automata_new();
+//
+// 	return (dfa);
+// }
+
 int main(int ac, char const *av[]) {
-	if (ac <= 1)
+	struct {
+		bool	mermaid;
+	}	flags;
+	flags.mermaid = false;
+
+	ssize_t	pos = 1;
+
+	while (pos < ac && av[pos][0] == '-') {
+		if (av[pos][1] == 'm') {
+			// Switch to mermaid output
+			flags.mermaid = true;
+		}
+		if (av[pos][1] == 'r') {
+			// Regex flag as breakout
+			++pos;
+			break ;
+		}
+		++pos;
+	}
+
+	if (pos == ac)
 		return (-1);
-	automata_t	*at = at_from_str((input_t const *)av[1]);
+	automata_t	*at = enfa_from_str((input_t const *)av[pos]);
 	if (at == NULL)
 		return (-1);
-	print_automata(at);
+	if (flags.mermaid == true) {
+		mermaid_automata(at);
+	} else {
+		print_automata(at);
+	}
 	automata_del(at);
 	return (0);
 }

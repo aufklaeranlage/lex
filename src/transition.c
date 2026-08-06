@@ -7,6 +7,8 @@ bool transition_init(transition_t *t) {
 		return (false);
 	t->state = -1;
 	t->next = NULL;
+	t->min = 0;
+	t->max = 0;
 	return (true);
 }
 
