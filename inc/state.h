@@ -21,4 +21,7 @@ void	state_del(state_t *st);
 bool	state_resize(state_t *st, ssize_t size);
 bool	state_add_transition(state_t *st, transition_t *t, ssize_t idx);
 
+bool	state_is_empty(state_t *st);
+bool	state_contains(state_t *st, ssize_t idx);
+
 #endif

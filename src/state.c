@@ -82,7 +82,29 @@ bool state_resize(state_t *st, ssize_t size) {
 bool state_add_transition(state_t *st, transition_t *t, ssize_t idx) {
 	if (idx >= st->table_size)
 		return (false);
+	for (transition_t *tmp = st->table[idx]; tmp != NULL; tmp = tmp->next) {
+		if (tmp->state == t->state)
+			return (false);
+	}
 	t->next = st->table[idx];
 	st->table[idx] = t;
 	return (true);
+}
+
+bool state_is_empty(state_t *st) {
+	for (ssize_t i = 0; i < st->table_size; i++) {
+		if (st->table[i] != NULL)
+			return (false);
+	}
+	return (true);
+}
+
+bool state_contains(state_t *st, ssize_t idx) {
+	for (ssize_t i = 0; i < st->table_size; i++) {
+		for (transition_t *t = st->table[i]; t != NULL; t = t->next) {
+			if (t->state == idx)
+				return (true);
+		}
+	}
+	return (false);
 }

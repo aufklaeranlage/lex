@@ -35,7 +35,34 @@ void		automata_del(automata_t *at);
 
 ssize_t		automata_add_state(automata_t *at, state_t *st);
 
-ssize_t		automata_get_input_idx(automata_t *at, input_t in);
+ssize_t		automata_get_input_idx(automata_t const *at, input_t in);
 ssize_t		automata_add_input(automata_t *at, input_t in);
+
+typedef struct combination_node_s {
+	ssize_t	idx;
+	ssize_t	*mapped;
+	ssize_t	size;
+	bool	accepting;
+}	cnode_t;
+
+bool	cnode_init(cnode_t *cn, ssize_t idx, ssize_t size);
+cnode_t	*cnode_new(ssize_t idx, ssize_t size);
+void	cnode_clean(cnode_t *cn);
+bool	cnode_re(cnode_t *cn, ssize_t idx, ssize_t size);
+void	cnode_del(cnode_t *cn);
+
+typedef struct combination_map_s {
+	cnode_t	**nodes;
+	ssize_t	size;
+}	cmap_t;
+
+bool	cmap_init(cmap_t *cm);
+cmap_t	*cmap_new();
+void	cmap_clean(cmap_t *cm);
+bool	cmap_re(cmap_t *cm);
+void	cmap_del(cmap_t *cm);
+
+bool	cmap_add_node(cmap_t *cm, cnode_t *cn);
+ssize_t	cmap_contains(cmap_t *cm, cnode_t *cn);
 
 #endif

@@ -86,7 +86,7 @@ ssize_t automata_add_state(automata_t *at, state_t *st) {
  * 	@return The index of the given input if present in the alphabet; -1 if
  * 	the input is not present in the alphabet.
  */
-ssize_t automata_get_input_idx(automata_t *at, input_t in) {
+ssize_t automata_get_input_idx(automata_t const *at, input_t in) {
 	ssize_t	idx = 0;
 	while (idx < at->alphabet_size) {
 		if (at->alphabet[idx] == in)
@@ -113,4 +113,153 @@ ssize_t	automata_add_input(automata_t *at, input_t in) {
 	at->alphabet[idx] = in;
 	++at->alphabet_size;
 	return (idx);
+}
+
+/* COMBINATION NODES **********************************************************/
+
+/** @brief Initializes a new combination node and allocates memory for the
+ * 	mapped combinations
+ * 	@return Returns `true` on successfull allocation; `false` on failure to
+ * 	allocate
+ *
+ * 	Creates a new combination node, sets its `idx` to the provided idx that
+ * 	represents the new states idx that is a combination of the mapped states.
+ * 	Allocates an array of size `size` in `mapped` to put the idx of the nodes
+ * 	the new one should represent.
+ */ 
+bool cnode_init(cnode_t *cn, ssize_t idx, ssize_t size) {
+	if (cn == NULL) { return (false); }
+	cn->idx = idx;
+	cn->size = size;
+	cn->accepting = false;
+	cn->mapped = calloc(size, sizeof(ssize_t));
+	return (cn->mapped != NULL);
+}
+
+/**	@brief Allocates a new combination node and initializes it.
+ *  @return Returns the new node on success; `NUll` on failure to allocate or
+ *  initialize.
+ *
+ *  For information on the initialization check `cnode_init()`
+ */ 
+cnode_t *cnode_new(ssize_t idx, ssize_t size) {
+	cnode_t	*new = malloc(sizeof(cnode_t));
+	if (cnode_init(new, idx, size) == false) { return (cnode_del(new), NULL); }
+	return (new);
+}
+
+/**	@brief Cleans the combination node for reuse.
+ *  
+ *  Frees the `mapped` array inside a node
+ */ 
+void cnode_clean(cnode_t *cn) {
+	if (cn == NULL) { return ; }
+	free(cn->mapped);
+}
+
+/**	@brief Cleans and initializes a node to the provided values.
+ * 	@return Returns `true` on successfull initialization; `false` on failure to
+ * 	initialize.
+ */
+bool cnode_re(cnode_t *cn, ssize_t idx, ssize_t size) {
+	cnode_clean(cn);
+	return (cnode_init(cn, idx, size));
+}
+
+/**	@brief Cleans and frees a node
+ */ 
+void cnode_del(cnode_t *cn) {
+	cnode_clean(cn);
+	free(cn);
+}
+
+/* COMBINATION MAP ************************************************************/
+
+/**	@brief Initializes a combination map to hold no nodes and have a size of
+ * 	zero
+ * 	@return Returns `true` on successfull initialization; `false` on being given
+ * 	a `NULL` pointer.
+ */
+bool cmap_init(cmap_t *cm) {
+	if (cm == NULL) { return (false); }
+	cm->nodes = NULL;
+	cm->size = 0;
+	return (true);
+}
+
+/**	@brief Allocates and initializes a new combination map.
+ * 	@return Returns the new node on successfull allocatio nand initialization;
+ * 	`NULL` on failure to do so.
+ */
+cmap_t *cmap_new() {
+	cmap_t	*new = malloc(sizeof(cmap_t));
+	if (cmap_init(new) == false) { return (NULL); }
+	return (new);
+}
+
+/**	@brief Cleans a combination map and all it's nodes.
+ */ 
+void cmap_clean(cmap_t *cm) {
+	if (cm == NULL) { return ; }
+	for (ssize_t i = 0; i < cm->size; i++) {
+		cnode_del(cm->nodes[i]);
+	}
+	free(cm->nodes);
+	cm->nodes = NULL;
+	cm->size = 0;
+}
+
+/**	@brief Cleans an initializes a combination map
+ * 	@return Returns `true` on successfull re-initialization; `false` on failure
+ * 	to do so.
+ */
+bool cmap_re(cmap_t *cm) {
+	cmap_clean(cm);
+	return (cmap_init(cm));
+}
+
+/**	@brief Cleans a combination map and deallocates it.
+ */
+void cmap_del(cmap_t *cm) {
+	cmap_clean(cm);
+	free(cm);
+}
+
+/**	@brief Adds a node to the combination map.
+ * 	@return Returns `true` on successfull reallocation and adding; `false` on
+ * 	failure to do so.
+ */
+bool cmap_add_node(cmap_t *cm, cnode_t *cn) {
+	cnode_t	**tmp = realloc(cm->nodes, (cm->size + 1) * sizeof(cnode_t *));
+	if (tmp == NULL) { return (false); }
+	cm->nodes = tmp;
+	cm->nodes[cm->size++] = cn;
+	return (true);
+}
+
+ssize_t cmap_contains(cmap_t *cm, cnode_t *cn) {
+	for (ssize_t i = 0; i < cm->size; i++) {
+		// Not same size; can't match
+		if (cm->nodes[i]->size != cn->size)
+			continue ;
+
+		cnode_t	*node = cm->nodes[i];
+		bool	match = false;
+
+		for (ssize_t j = 0; j < cn->size; j++) {
+			ssize_t k = 0;
+			for (; k < node->size; k++) {
+				if (node->mapped[k] == cn->mapped[j]) {
+					match = true;
+					break ;
+				}
+			}
+			if ( k == node->size) {
+				match = false;
+				break ;
+			}
+		}
+		if (match == true) { return (i); }
+	}
+	return (-1);
 }

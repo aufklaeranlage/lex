@@ -1,0 +1,88 @@
+state:	epsi	a		b		c
+->0		-		1		-		-
+1		5;6		-		-		-
+2		3;4		-		-		-
+3		-		-		2		-
+4		10		-		-		-
+5		3;4		-		-		-
+6		8;9		-		-		-
+7		8;9		-		-		-
+8		-		-		-		7
+9		10		-		-		-
+*10		-		-		-		-
+
+0; 1; 5,6; 3,4; 2; 10; 8,9; 7;
+
+state:	epsi	a		b		c
+->0		-		1		-		-
+1		5,6		-		-		-
+5,6		3,4;8,9	-		-		-
+3,4		10		-		2		-
+2		3,4		-		-		-
+*10		-		-		-		-
+8,9		10		-		-		7
+7		8,9		-		-		-
+
+0; 1; 5,6; 3,4,8,9; 10; 2; 3,4; 7; 8,9;
+
+states:	epsi	a		b		c
+->0		-		1		-		-
+1		5,6		-		-		-
+5,6		3,4,8,9	-		-		-
+3,4,8,9	10		-		2		7
+2		3,4		-		-		-
+*10		-		-		-		-
+3,4		10		-		2		-
+7		8,9		-		-		-
+8,9		10		-		-		7
+
+-- No states with ambigiousity in transitions anymore
+
+-- Cut out all states that only have epsilon transitions by redirecting transitions
+	to them with transitions to their epsilon transition targets
+
+	-- After each found state with this condition do the exchange operation on the
+		whole automata and start search from the beginning
+
+states:	epsi	a		b		c
+->0		-		5,6		-		-
+1		cut out - only epsi
+... target found and replaced
+
+states:	epsi	a		b		c
+->0		-		3,4,8,9	-		-
+5,6		cut out - only epsi
+... target found and replaced
+
+states:	epsi	a		b		c
+->0		-		3,4,8,9	-		-
+3,4,8,9	10		-		3,4		7
+2		cut out - only epsi
+*10		-		-		-		-
+3,4		10		-		3,4		-
+... target found and replaced
+
+states:	epsi	a		b		c
+->0		-		3,4,8,9	-		-
+3,4,8,9	10		-		3,4		8,9
+*10		-		-		-		-
+3,4		10		-		3,4		-
+7		cut out - only epsi
+8,9		10		-		-		8,9
+
+-- No states with only epsilon connections exist anymore
+
+-- Only state with epsilon connections should be end state
+	check for epsilon connections to the end state and set all states connected through
+	one to it to be accepting and delete the transitions. If the end state is reachable
+	otherwise keep it, else delete it.
+
+Final table:
+
+states:	a	b	c
+->0		1	-	-
+*1		-	2	3
+*2		-	2	-
+*3		-	-	3
+
+	
