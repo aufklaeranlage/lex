@@ -206,9 +206,11 @@ automata_t *enfa_from_str(input_t const *str) {
 	struct {
 		bool	or;
 		bool	set;
+		bool	esc;
 	}	flags;
 	flags.or = false;
 	flags.set = false;
+	flags.esc = false;
 
 	at->start_state = 0;
 	ssize_t		epsi_idx = automata_add_input(at, epsilon);
@@ -232,72 +234,79 @@ automata_t *enfa_from_str(input_t const *str) {
 	ssize_t	pos = 0;
 	ssize_t	alpha_idx;
 	while (str[pos] != '\0') {
-		if (str[pos] == asterisk) {
-			// Insert artifical start state before start
-			++scope_pos;
-			NEW_STATE(CUR_SCOPE.start);
-			NEW_STATE(CUR_SCOPE.end);
-			ssize_t	start_idx = automata_get_stateidx(at, start);\
-			ssize_t	tmp_idx = automata_get_stateidx(at, CUR_SCOPE.start);\
-			at->states[start_idx] = CUR_SCOPE.start;\
-			at->states[tmp_idx] = start;\
-			// Before start modifications
-			CONNECT(CUR_SCOPE.start, start, epsi_idx);
-			CONNECT(end, start, epsi_idx);
-			CONNECT(end, CUR_SCOPE.end, epsi_idx);
-			CONNECT(CUR_SCOPE.start, CUR_SCOPE.end, epsi_idx);
-			end = CUR_SCOPE.end;
-			start = CUR_SCOPE.start;
-			--scope_pos;
-			CUR_SCOPE.start = start;
-			CUR_SCOPE.end = end;
-
-			++pos;
-			continue ;
-		} else if (str[pos] == lbrack) {
-			CUR_SCOPE.start = end;
-			NEW_STATE(start);
-			CONNECT(end, start, epsi_idx);
-			NEW_STATE(CUR_SCOPE.end);
-			++scope_pos;
-			end = start;
-			CUR_SCOPE.start = start;
-			CUR_SCOPE.end = end;
-			// Reset threadpos for new scope
-			CUR_SCOPE.thread_pos = 0;
-
-			++pos;
-			continue ;
-		} else if (str[pos] == rbrack) {
-			--scope_pos;
-			CONNECT(end, CUR_SCOPE.end, epsi_idx);
-			start = CUR_SCOPE.start;
-			end = CUR_SCOPE.end;
-
-			++pos;
-			continue ;
-		} else if (str[pos] == pipeor) {
-			if (start == CUR_SCOPE.start) {
+		if (flags.esc == false && flags.set == false) {
+			if (str[pos] == asterisk) {
 				// Insert artifical start state before start
-				INSERT_PRE_START;
+				++scope_pos;
+				NEW_STATE(CUR_SCOPE.start);
+				NEW_STATE(CUR_SCOPE.end);
+				ssize_t	start_idx = automata_get_stateidx(at, start);\
+				ssize_t	tmp_idx = automata_get_stateidx(at, CUR_SCOPE.start);\
+				at->states[start_idx] = CUR_SCOPE.start;\
+				at->states[tmp_idx] = start;\
+				// Before start modifications
+				CONNECT(CUR_SCOPE.start, start, epsi_idx);
+				CONNECT(end, start, epsi_idx);
+				CONNECT(end, CUR_SCOPE.end, epsi_idx);
+				CONNECT(CUR_SCOPE.start, CUR_SCOPE.end, epsi_idx);
+				end = CUR_SCOPE.end;
+				start = CUR_SCOPE.start;
+				--scope_pos;
+				CUR_SCOPE.start = start;
+				CUR_SCOPE.end = end;
+
+				++pos;
+				continue ;
+			} else if (str[pos] == lbrack) {
+				CUR_SCOPE.start = end;
+				NEW_STATE(start);
+				CONNECT(end, start, epsi_idx);
+				NEW_STATE(CUR_SCOPE.end);
+				++scope_pos;
+				end = start;
+				CUR_SCOPE.start = start;
+				CUR_SCOPE.end = end;
+				// Reset threadpos for new scope
+				CUR_SCOPE.thread_pos = 0;
+
+				++pos;
+				continue ;
+			} else if (str[pos] == rbrack && scope_pos > 0) {
+				--scope_pos;
+				CONNECT(end, CUR_SCOPE.end, epsi_idx);
+				start = CUR_SCOPE.start;
+				end = CUR_SCOPE.end;
+
+				++pos;
+				continue ;
+			} else if (str[pos] == pipeor) {
+				if (start == CUR_SCOPE.start) {
+					// Insert artifical start state before start
+					INSERT_PRE_START;
+				}
+				CUR_SCOPE.threads[CUR_SCOPE.thread_pos++] = end;
+				NEW_STATE(start);
+				CONNECT(CUR_SCOPE.start, start, epsi_idx);
+				end = start;
+				CUR_SCOPE.end = end;
+				flags.or = true;
+
+				++pos;
+				continue ;
+			} else if (str[pos] == lsqbrack && flags.set != true) {
+				// Move scope once for new input set
+				flags.set = true;
+				MOVE_SCOPE;
+
+				++pos;
+				continue ;
+			} else if (str[pos] == escape) {
+				flags.esc = true;
+
+				++pos;
+				continue ;
 			}
-			CUR_SCOPE.threads[CUR_SCOPE.thread_pos++] = end;
-			NEW_STATE(start);
-			CONNECT(CUR_SCOPE.start, start, epsi_idx);
-			end = start;
-			CUR_SCOPE.end = end;
-			flags.or = true;
-
-			++pos;
-			continue ;
-		} else if (str[pos] == lsqbrack && flags.set != true) {
-			// Move scope once for new input set
-			flags.set = true;
-			MOVE_SCOPE;
-
-			++pos;
-			continue ;
-		} else if (str[pos] == rsqbrack && flags.set == true) {
+		} else if (flags.set == false && str[pos] == rsqbrack && flags.set == true) {
 			flags.set = false;
 
 			++pos;
@@ -315,6 +324,8 @@ automata_t *enfa_from_str(input_t const *str) {
 		}
 		// Reset or flag so we connect threads on the next operation
 		flags.or = false;
+
+		flags.esc = false;
 
 		if (flags.set == false) {
 			// Literal input
