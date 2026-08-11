@@ -14,6 +14,7 @@ static const input_t	lcurly = '{';
 static const input_t	rcurly = '}';
 static const input_t	pipeor = '|';
 static const input_t	asterisk = '*';
+static const input_t	setconnect = '-';
 static const input_t	escape = '\\';
 static const input_t	epsilon = -1;
 

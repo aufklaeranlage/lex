@@ -117,7 +117,9 @@ void print_automata(automata_t *at) {
 	}
 	printf("\n");
 	for (int i = 0; i < rows; i++) {
-		if (i == at->start_state) {
+		if (i == at->start_state && at->states[i] != NULL && at->states[i]->accepting == true) {
+			printf("|->*%5d|", i);
+		} else if (i == at->start_state) {
 			printf("|->%6d|", i);
 		} else if (at->states[i] != NULL && at->states[i]->accepting == true) {
 			printf("|*%7d|", i);
@@ -203,8 +205,10 @@ automata_t *enfa_from_str(input_t const *str) {
 
 	struct {
 		bool	or;
+		bool	set;
 	}	flags;
 	flags.or = false;
+	flags.set = false;
 
 	at->start_state = 0;
 	ssize_t		epsi_idx = automata_add_input(at, epsilon);
@@ -286,10 +290,20 @@ automata_t *enfa_from_str(input_t const *str) {
 
 			++pos;
 			continue ;
+		} else if (str[pos] == lsqbrack && flags.set != true) {
+			// Move scope once for new input set
+			flags.set = true;
+			MOVE_SCOPE;
+
+			++pos;
+			continue ;
+		} else if (str[pos] == rsqbrack && flags.set == true) {
+			flags.set = false;
+
+			++pos;
+			continue ;
 		}
-		// Literal input
-		alpha_idx = automata_add_input(at, str[pos]);
-		if (alpha_idx == -1) { return (cleanup(at, NULL, NULL)); }
+
 		// Connect loose threads if we didn't just add one
 		if (flags.or == false && CUR_SCOPE.thread_pos != 0) {
 			MOVE_SCOPE;
@@ -302,8 +316,36 @@ automata_t *enfa_from_str(input_t const *str) {
 		// Reset or flag so we connect threads on the next operation
 		flags.or = false;
 
-		MOVE_SCOPE;
-		CONNECT(start, end, alpha_idx);
+		if (flags.set == false) {
+			// Literal input
+			alpha_idx = automata_add_input(at, str[pos]);
+			if (alpha_idx == -1) { return (cleanup(at, NULL, NULL)); }
+			// No set == move scope
+			MOVE_SCOPE;
+			CONNECT(start, end, alpha_idx);
+		} else if (flags.set == true) {
+			if (str[pos] == setconnect) {
+				char	start_c = str[pos - 1];
+				char	end_c = str[pos + 1];
+				char	dir = start_c > end_c ? -1 : 1;
+				for (; start_c != end_c; start_c += dir) {
+					// Literal input
+					alpha_idx = automata_add_input(at, start_c);
+					if (alpha_idx == -1) { return (cleanup(at, NULL, NULL)); }
+					CONNECT(start, end, alpha_idx);
+				}
+				// Literal input
+				alpha_idx = automata_add_input(at, end_c);
+				if (alpha_idx == -1) { return (cleanup(at, NULL, NULL)); }
+				CONNECT(start, end, alpha_idx);
+			} else {
+				// Literal input
+				alpha_idx = automata_add_input(at, str[pos]);
+				if (alpha_idx == -1) { return (cleanup(at, NULL, NULL)); }
+				// Set == don't move scope
+				CONNECT(start, end, alpha_idx);
+			}
+		}
 		++pos;
 	}
 
