@@ -251,7 +251,7 @@ automata_t *enfa_from_str(input_t const *str) {
 			++pos;
 			continue ;
 		} else if (str[pos] == lbrack) {
-			CUR_SCOPE.start = start;
+			CUR_SCOPE.start = end;
 			NEW_STATE(start);
 			CONNECT(end, start, epsi_idx);
 			NEW_STATE(CUR_SCOPE.end);
@@ -708,36 +708,50 @@ automata_t	*remove_ambiguity(automata_t *nfa) {
 
 int main(int ac, char const *av[]) {
 	struct {
+		bool	nfa;
 		bool	mermaid;
+		bool	regex;
 	}	flags;
 	flags.mermaid = false;
+	flags.nfa = false;
+	flags.regex = false;
 
+	automata_t	*at;
 	ssize_t	pos = 1;
 
 	while (pos < ac && av[pos][0] == '-') {
-		if (av[pos][1] == 'm') {
-			// Switch to mermaid output
-			flags.mermaid = true;
-		}
-		if (av[pos][1] == 'r') {
-			// Regex flag as breakout
-			++pos;
-			break ;
+		switch (av[pos][1]) {
+			case 'm': flags.mermaid = true; break ;
+			case 'n': flags.nfa = true; break ;
+			case 'r': ++pos;
+				if (pos == ac) { return (-1); }
+				if (flags.regex != true) {
+					at = enfa_from_str(av[pos]); flags.regex = true;
+				}
+				break ;
 		}
 		++pos;
 	}
 
 	if (pos == ac)
-		return (-1);
-	automata_t	*at = enfa_from_str((input_t const *)av[pos]);
+		return (automata_del(at), -1);
+
+	if (flags.regex == false) {
+		at = enfa_from_str(av[pos]);
+	}
+
 	if (at == NULL)
-		return (-1);
-	// if (flags.mermaid == true) {
-	// 	mermaid_automata(at, "enfa");
-	// } else {
-	// 	printf("eNFA\n");
-	// 	print_automata(at);
-	// }
+		return (automata_del(at), -1);
+
+	if (flags.nfa == true) {
+		if (flags.mermaid == true) {
+			mermaid_automata(at, "stateDiagram-v2");
+		} else {
+			printf("eNFA\n");
+			print_automata(at);
+		}
+		return (automata_del(at), -1);
+	}
 	automata_t	*dfa = remove_ambiguity(at);
 	if (flags.mermaid == true) {
 		mermaid_automata(dfa, "stateDiagram-v2");
