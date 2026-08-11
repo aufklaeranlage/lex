@@ -679,14 +679,14 @@ automata_t	*validate_end(automata_t *at) {
 }
 
 automata_t	*remove_ambiguity(automata_t *nfa) {
-	automata_t	*new = NULL, *old = nfa;
+	automata_t	*new = nfa, *old = nfa;
 
-	while (automata_has_ambiguity(old)) {
+	while (automata_has_ambiguity(old) || automata_has_epsilon(old)) {
 		while (automata_has_ambiguity(old)) {
 			new = combine_states(old);
 			// printf("\nCOMBINE STATES\n");
 			// print_automata(new);
-			if (old != nfa) { automata_del(old); }
+			automata_del(old);
 			if (new == NULL) {
 				break ;
 			}
@@ -703,6 +703,7 @@ automata_t	*remove_ambiguity(automata_t *nfa) {
 		// print_automata(new);
 		old = new;
 	}
+
 	return (new);
 }
 
@@ -759,7 +760,6 @@ int main(int ac, char const *av[]) {
 		printf("DFA\n");
 		print_automata(dfa);
 	}
-	automata_del(at);
 	automata_del(dfa);
 	return (0);
 }
